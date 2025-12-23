@@ -1223,18 +1223,25 @@
         }
 
         function processData(result, targetMetric) {
+            // Normalize different backend/mock response shapes to a common structure
+            // Support: { Data: [...] } or { TimingDataRecords: [...] } or Tencent-like { data: { Response: { Data: [...] } } }
+            let normalized = result || {};
+            if (result?.data?.Response?.Data) {
+                normalized = { Data: result.data.Response.Data };
+            }
+
             // Check for Top Data Structure (DescribeTopL7AnalysisData)
             // It returns Data[0].DetailData (Array of Key/Value)
-            if (result?.Data?.[0]?.DetailData) {
+            if (normalized?.Data?.[0]?.DetailData) {
                  return {
                      type: 'top',
-                     data: result.Data[0].DetailData
+                     data: normalized.Data[0].DetailData
                  };
             }
 
             // DescribeTimingL7AnalysisData returns 'Data'
             // DescribeTimingL7OriginPullData returns 'TimingDataRecords'
-            const dataList = result?.Data || result?.TimingDataRecords || [];
+            const dataList = normalized?.Data || normalized?.TimingDataRecords || [];
             if (dataList.length === 0) return { timeData: [], valueData: [], sum: 0, max: 0, avg: 0, type: 'time' };
 
             let typeValue;
