@@ -1,5 +1,6 @@
 import express from 'express';
 import fs from 'fs';
+import path from 'path';
 import 'dotenv/config';
 
 const app = express();
@@ -29,7 +30,8 @@ app.get('/config', (req, res) => {
 app.get('/zones', async (req, res) => {
     try {
         const token = getToken();
-        if (!token) return res.status(500).json({ error: 'Missing Cloudflare API token. Set CF_API_TOKEN or cf_token.txt' });
+        const useLocalMock = process.env.USE_LOCAL_MOCK === '1' || !token;
+        if (!token && !useLocalMock) return res.status(500).json({ error: 'Missing Cloudflare API token. Set CF_API_TOKEN or cf_token.txt' });
 
         const url = new URL('https://api.cloudflare.com/client/v4/zones');
         if (req.query.name) url.searchParams.set('name', req.query.name);
@@ -53,9 +55,9 @@ app.get('/traffic', async (req, res) => {
         const token = getToken();
         if (!token) return res.status(500).json({ error: 'Missing Cloudflare API token. Set CF_API_TOKEN or cf_token.txt' });
 
-        // require zoneId
+        // zoneId is required for real Cloudflare calls, but optional when using local mock
         const zoneId = req.query.zoneId;
-        if (!zoneId) return res.status(400).json({ error: 'Missing zoneId parameter' });
+        if (!zoneId && !useLocalMock) return res.status(400).json({ error: 'Missing zoneId parameter' });
 
         const now = new Date();
         const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -64,6 +66,24 @@ app.get('/traffic', async (req, res) => {
 
         // metrics: bandwidth, requests, uniques
         const metrics = req.query.metrics || 'bandwidth,requests';
+
+        // If we're configured to use local mock (or token missing), try to return a local mock file
+        if (useLocalMock) {
+            try {
+                const metric = req.query.metric || 'l7Flow_flux';
+                const mockFile = path.join(process.cwd(), '辅助文件', `mock_${metric}.json`);
+                if (fs.existsSync(mockFile)) {
+                    const raw = fs.readFileSync(mockFile, 'utf-8');
+                    const json = JSON.parse(raw);
+                    return res.json(json);
+                } else {
+                    return res.status(500).json({ error: `Local mock not found: ${mockFile}` });
+                }
+            } catch (e) {
+                console.error('Error returning local mock:', e);
+                return res.status(500).json({ error: e.message });
+            }
+        }
 
         const url = new URL(`https://api.cloudflare.com/client/v4/zones/${zoneId}/analytics/series`);
         url.searchParams.set('metrics', metrics);
