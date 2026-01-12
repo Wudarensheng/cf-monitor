@@ -4,7 +4,7 @@
     <link rel="icon" href="https://blog.wudarensheng.top/img/avatar_hu13333040984274864775.png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>无大人生 的 EdgeOne 监控大屏</title>
+    <title>Cloudflare 流量监控面板</title>
     <!-- Tailwind CSS for Shadcn/UI style -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
@@ -116,8 +116,8 @@
         <!-- Header -->
         <div class="flex items-center justify-between">
             <div>
-                <h1 id="page-header" class="text-3xl font-bold tracking-tight text-slate-900">无大人生 的 EdgeOne 监控大屏</h1>
-                <p class="text-muted-foreground mt-1">EdgeOne 站点流量与请求量分析</p>
+                <h1 id="page-header" class="text-3xl font-bold tracking-tight text-slate-900">Cloudflare 流量监控面板</h1>
+                <p class="text-muted-foreground mt-1">Cloudflare 站点流量与请求量分析</p>
             </div>
         </div>
 
@@ -210,14 +210,14 @@
                             <p class="text-xs text-muted-foreground mt-1">客户端请求流量</p>
                         </div>
                     </div>
-                    <!-- EdgeOne Response Traffic -->
+                    <!-- Cloudflare Response Traffic -->
                     <div class="rounded-xl border bg-card text-card-foreground shadow-sm">
                         <div class="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
                             <h3 class="tracking-tight text-sm font-medium text-muted-foreground">响应流量 (Out)</h3>
                         </div>
                         <div class="p-6 pt-0">
                             <div class="text-2xl font-bold" id="kpi_l7Flow_outFlux">加载中...</div>
-                            <p class="text-xs text-muted-foreground mt-1">EdgeOne 响应流量</p>
+                            <p class="text-xs text-muted-foreground mt-1">Cloudflare 响应流量</p>
                         </div>
                     </div>
                 </div>
@@ -266,7 +266,7 @@
                         </div>
                         <div class="p-6 pt-0">
                             <div class="text-2xl font-bold" id="kpi_l7Flow_outBandwidth">加载中...</div>
-                            <p class="text-xs text-muted-foreground mt-1">EdgeOne 响应带宽峰值</p>
+                            <p class="text-xs text-muted-foreground mt-1">Cloudflare 响应带宽峰值</p>
                         </div>
                     </div>
                 </div>
@@ -295,7 +295,7 @@
                         </div>
                         <div class="p-6 pt-0">
                             <div class="text-2xl font-bold" id="kpi_l7Flow_outFlux_hy">加载中...</div>
-                            <p class="text-xs text-muted-foreground mt-1">EdgeOne 节点至源站</p>
+                            <p class="text-xs text-muted-foreground mt-1">Cloudflare 节点至源站</p>
                         </div>
                     </div>
                     <!-- Origin Requests -->
@@ -305,7 +305,7 @@
                         </div>
                         <div class="p-6 pt-0">
                             <div class="text-2xl font-bold" id="kpi_l7Flow_request_hy">加载中...</div>
-                            <p class="text-xs text-muted-foreground mt-1">EdgeOne 节点至源站</p>
+                            <p class="text-xs text-muted-foreground mt-1">Cloudflare 节点至源站</p>
                         </div>
                     </div>
                     <!-- Origin Out Bandwidth -->
@@ -315,7 +315,7 @@
                         </div>
                         <div class="p-6 pt-0">
                             <div class="text-2xl font-bold" id="kpi_l7Flow_outBandwidth_hy">加载中...</div>
-                            <p class="text-xs text-muted-foreground mt-1">EdgeOne 节点至源站</p>
+                            <p class="text-xs text-muted-foreground mt-1">Cloudflare 节点至源站</p>
                         </div>
                     </div>
                 </div>
@@ -328,7 +328,7 @@
                         </div>
                         <div class="p-6 pt-0">
                             <div class="text-2xl font-bold" id="kpi_l7Flow_inFlux_hy">加载中...</div>
-                            <p class="text-xs text-muted-foreground mt-1">源站至 EdgeOne 节点</p>
+                            <p class="text-xs text-muted-foreground mt-1">源站至 Cloudflare 节点</p>
                         </div>
                     </div>
                     <!-- Origin In Bandwidth -->
@@ -338,7 +338,7 @@
                         </div>
                         <div class="p-6 pt-0">
                             <div class="text-2xl font-bold" id="kpi_l7Flow_inBandwidth_hy">加载中...</div>
-                            <p class="text-xs text-muted-foreground mt-1">源站至 EdgeOne 节点</p>
+                            <p class="text-xs text-muted-foreground mt-1">源站至 Cloudflare 节点</p>
                         </div>
                     </div>
                     <!-- Cache Hit Rate -->
@@ -348,7 +348,7 @@
                         </div>
                         <div class="p-6 pt-0">
                             <div class="text-2xl font-bold" id="kpi_cache_hit_rate">加载中...</div>
-                            <p class="text-xs text-muted-foreground mt-1">1 - (源站响应 / EdgeOne 响应)</p>
+                            <p class="text-xs text-muted-foreground mt-1">1 - (源站响应 / Cloudflare 响应)</p>
                         </div>
                     </div>
                 </div>
@@ -364,11 +364,11 @@
                 </div>
             </div>
 
-            <!-- Section: Edge Functions (边缘函数) -->
+            <!-- Section: Cloudflare Workers (Workers函数) -->
             <div class="space-y-4">
                 <h2 class="text-xl font-bold tracking-tight text-slate-800 flex items-center gap-2">
                     <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
-                    边缘函数 (Edge Functions)
+                    Workers函数 (Cloudflare Workers)
                 </h2>
                 <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-2">
                     <!-- Function Requests -->
@@ -378,7 +378,7 @@
                         </div>
                         <div class="p-6 pt-0">
                             <div class="text-2xl font-bold" id="kpi_function_requestCount">加载中...</div>
-                            <p class="text-xs text-muted-foreground mt-1">Edge Functions 总调用次数</p>
+                            <p class="text-xs text-muted-foreground mt-1">Cloudflare Workers 总调用次数</p>
                         </div>
                     </div>
                     <!-- Function CPU Time -->
@@ -388,7 +388,7 @@
                         </div>
                         <div class="p-6 pt-0">
                             <div class="text-2xl font-bold" id="kpi_function_cpuCostTime">加载中...</div>
-                            <p class="text-xs text-muted-foreground mt-1">Edge Functions 总 CPU 耗时 (ms)</p>
+                            <p class="text-xs text-muted-foreground mt-1">Cloudflare Workers 总 CPU 耗时 (ms)</p>
                         </div>
                     </div>
                 </div>
@@ -414,11 +414,11 @@
                 </div>
             </div>
 
-            <!-- Section: Pages Build Statistics (Pages 统计) -->
+            <!-- Section: Cloudflare Pages & Workers Statistics (Pages与Workers统计) -->
             <div class="space-y-4">
                 <h2 class="text-xl font-bold tracking-tight text-slate-800 flex items-center gap-2">
                     <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
-                    Pages 统计 (Pages Stats)
+                    Pages与Workers统计 (Pages & Workers Stats)
                 </h2>
                 <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                     <!-- Daily Build Count -->
@@ -428,7 +428,7 @@
                         </div>
                         <div class="p-6 pt-0">
                             <div class="text-2xl font-bold" id="kpi_pages_daily_build">加载中...</div>
-                            <p class="text-xs text-muted-foreground mt-1">Pages 当日构建总次数</p>
+                            <p class="text-xs text-muted-foreground mt-1">Pages/Workers 当日构建总次数</p>
                         </div>
                     </div>
                     <!-- Monthly Build Count -->
@@ -438,7 +438,7 @@
                         </div>
                         <div class="p-6 pt-0">
                             <div class="text-2xl font-bold" id="kpi_pages_monthly_build">加载中...</div>
-                            <p class="text-xs text-muted-foreground mt-1">Pages 当月构建总次数</p>
+                            <p class="text-xs text-muted-foreground mt-1">Pages/Workers 当月构建总次数</p>
                         </div>
                     </div>
                     <!-- Cloud Functions 24h Requests -->
@@ -982,8 +982,8 @@
             'l7Flow_request': '请求数',
             'l7Flow_avgResponseTime': '平均响应耗时',
             'l7Flow_avgFirstByteResponseTime': '平均首字节耗时',
-            'function_requestCount': 'Edge Functions 请求数',
-            'function_cpuCostTime': 'Edge Functions CPU 时间',
+            'function_requestCount': 'Cloudflare Workers 请求数',
+            'function_cpuCostTime': 'Cloudflare Workers CPU 时间',
             'ccAcl_interceptNum': '精确防护拦截',
             'ccManage_interceptNum': '托管规则拦截',
             'ccRate_interceptNum': '速率限制拦截',
