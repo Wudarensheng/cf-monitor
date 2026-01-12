@@ -1,11 +1,33 @@
-# Tencent Cloud EdgeOne
-.env
-.edgeone
-!.edgeone/project.json
-.tef_dist/*
-
-# node_modules
+```
+# Dependencies
 node_modules/
 
-# key
-key.txt
+# Environment
+.env
+.env.local
+.env.*
+
+# Logs and temp files
+*.log
+*.tmp
+
+# Editors
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build outputs
+dist/
+build/
+*.min.js
+*.min.css
+
+# OS
+.DS_Store
+Thumbs.db
+```
