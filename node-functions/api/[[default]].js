@@ -2,23 +2,10 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import 'dotenv/config';
+import CloudflareAPIClient from './cf-api-client.js';
 
 const app = express();
-
-function getToken() {
-    let token = process.env.CF_API_TOKEN;
-    if (token) return token;
-
-    try {
-        const p = `${process.cwd()}/cf_token.txt`;
-        if (fs.existsSync(p)) {
-            token = fs.readFileSync(p, 'utf-8').trim();
-        }
-    } catch (e) {
-        console.error('Error reading cf_token.txt', e);
-    }
-    return token;
-}
+const cfClient = new CloudflareAPIClient();
 
 app.get('/config', (req, res) => {
     res.json({
@@ -29,21 +16,24 @@ app.get('/config', (req, res) => {
 
 app.get('/zones', async (req, res) => {
     try {
-        const token = getToken();
-        const useLocalMock = process.env.USE_LOCAL_MOCK === '1' || !token;
-        if (!token && !useLocalMock) return res.status(500).json({ error: 'Missing Cloudflare API token. Set CF_API_TOKEN or cf_token.txt' });
+        const useLocalMock = process.env.USE_LOCAL_MOCK === '1' || !cfClient.token;
+        if (!cfClient.token && !useLocalMock) return res.status(500).json({ error: 'Missing Cloudflare API token. Set CF_API_TOKEN or cf_token.txt' });
 
-        const url = new URL('https://api.cloudflare.com/client/v4/zones');
-        if (req.query.name) url.searchParams.set('name', req.query.name);
-
-        const resp = await fetch(url.toString(), {
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
+        if (useLocalMock) {
+            // Return mock data
+            const mockFile = path.join(process.cwd(), '辅助文件', '站点id回参.json');
+            if (fs.existsSync(mockFile)) {
+                const raw = fs.readFileSync(mockFile, 'utf-8');
+                const json = JSON.parse(raw);
+                return res.json(json);
+            } else {
+                return res.status(500).json({ error: `Local mock not found: ${mockFile}` });
             }
-        });
-        const data = await resp.json();
-        res.json(data);
+        }
+
+        // Get zones with optional name filter
+        const zonesResponse = await cfClient.getZones(req.query);
+        res.json(zonesResponse);
     } catch (err) {
         console.error('Error fetching Cloudflare zones', err);
         res.status(500).json({ error: err.message });
@@ -52,23 +42,13 @@ app.get('/zones', async (req, res) => {
 
 app.get('/traffic', async (req, res) => {
     try {
-        const token = getToken();
-        const useLocalMock = process.env.USE_LOCAL_MOCK === '1' || !token;
-        if (!token && !useLocalMock) return res.status(500).json({ error: 'Missing Cloudflare API token. Set CF_API_TOKEN or cf_token.txt' });
+        const useLocalMock = process.env.USE_LOCAL_MOCK === '1' || !cfClient.token;
+        if (!cfClient.token && !useLocalMock) return res.status(500).json({ error: 'Missing Cloudflare API token. Set CF_API_TOKEN or cf_token.txt' });
 
         // zoneId is required for real Cloudflare calls, but optional when using local mock
         const zoneId = req.query.zoneId;
         if (!zoneId && !useLocalMock) return res.status(400).json({ error: 'Missing zoneId parameter' });
 
-        const now = new Date();
-        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        const start = req.query.startTime || yesterday.toISOString();
-        const end = req.query.endTime || now.toISOString();
-
-        // metrics: bandwidth, requests, uniques
-        const metrics = req.query.metrics || 'bandwidth,requests';
-
-        // If we're configured to use local mock (or token missing), try to return a local mock file
         if (useLocalMock) {
             try {
                 const metric = req.query.metric || 'l7Flow_flux';
@@ -86,20 +66,22 @@ app.get('/traffic', async (req, res) => {
             }
         }
 
-        const url = new URL(`https://api.cloudflare.com/client/v4/zones/${zoneId}/analytics/series`);
-        url.searchParams.set('metrics', metrics);
-        url.searchParams.set('since', start);
-        url.searchParams.set('until', end);
-        url.searchParams.set('continuous', 'true');
+        // Prepare parameters for API call
+        const params = {
+            startTime: req.query.startTime,
+            endTime: req.query.endTime,
+            metrics: req.query.metrics || 'bandwidth,requests',
+            continuous: 'true'
+        };
 
-        const resp = await fetch(url.toString(), {
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
+        // Remove undefined/null values
+        Object.keys(params).forEach(key => {
+            if (params[key] === undefined || params[key] === null) {
+                delete params[key];
             }
         });
 
-        const data = await resp.json();
+        const data = await cfClient.getZoneAnalyticsSeries(zoneId, params);
         res.json(data);
     } catch (err) {
         console.error('Error fetching Cloudflare traffic', err);
@@ -110,8 +92,7 @@ app.get('/traffic', async (req, res) => {
 // Pages Build Count endpoint
 app.get('/pages/build-count', async (req, res) => {
     try {
-        const token = getToken();
-        const useLocalMock = process.env.USE_LOCAL_MOCK === '1' || !token;
+        const useLocalMock = process.env.USE_LOCAL_MOCK === '1' || !cfClient.token;
         
         if (useLocalMock) {
             // Return mock data
@@ -125,25 +106,55 @@ app.get('/pages/build-count', async (req, res) => {
             }
         }
 
-        // Currently, Cloudflare doesn't have a direct API for Pages build counts
-        // We'll return a placeholder response or could potentially integrate with 
-        // Cloudflare Pages API if specific project ID is provided
         const accountId = process.env.CF_ACCOUNT_ID; // Account ID needed for Pages API
         if (!accountId) {
             return res.status(400).json({ error: 'CF_ACCOUNT_ID environment variable required for Pages API' });
         }
 
-        // Placeholder - in a real implementation, we would call the Cloudflare Pages API
-        // GET https://api.cloudflare.com/client/v4/accounts/{account_id}/pages/projects
-        // Then for each project, get builds: /projects/{project_name}/deployments
-        
+        // Fetch pages projects to get deployment information
+        const projectsResponse = await cfClient.getPagesProjects(accountId);
+        if (!projectsResponse.success) {
+            return res.status(500).json({ error: 'Failed to fetch Pages projects' });
+        }
+
+        // Calculate deployment counts
+        let dailyCount = 0;
+        let monthlyCount = 0;
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        // Process each project to count deployments
+        for (const project of projectsResponse.result) {
+            try {
+                const deploymentsResponse = await cfClient.getPagesProjectDeployments(accountId, project.name);
+                
+                if (deploymentsResponse.success && Array.isArray(deploymentsResponse.result)) {
+                    for (const deployment of deploymentsResponse.result) {
+                        const createdDate = new Date(deployment.created_on);
+                        
+                        if (createdDate >= startOfDay) {
+                            dailyCount++;
+                        }
+                        
+                        if (createdDate >= startOfMonth) {
+                            monthlyCount++;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn(`Could not fetch deployments for project ${project.name}:`, e.message);
+                continue;
+            }
+        }
+
         res.json({
             success: true,
             errors: [],
             messages: [],
             result: {
-                dplDailyCount: 0,
-                dplMonthCount: 0
+                dplDailyCount: dailyCount,
+                dplMonthCount: monthlyCount
             }
         });
     } catch (err) {
@@ -155,8 +166,7 @@ app.get('/pages/build-count', async (req, res) => {
 // Cloud Functions Requests endpoint
 app.get('/pages/cloud-function-requests', async (req, res) => {
     try {
-        const token = getToken();
-        const useLocalMock = process.env.USE_LOCAL_MOCK === '1' || !token;
+        const useLocalMock = process.env.USE_LOCAL_MOCK === '1' || !cfClient.token;
         
         if (useLocalMock) {
             // Return mock data
@@ -171,34 +181,51 @@ app.get('/pages/cloud-function-requests', async (req, res) => {
         }
 
         // For Cloudflare Workers/Functions analytics, we'd need to use Workers API
-        // This is a simplified implementation that returns basic stats
-        const zoneId = req.query.zoneId;
-        if (!zoneId) {
-            return res.status(400).json({ error: 'zoneId parameter required' });
+        const accountId = process.env.CF_ACCOUNT_ID || await cfClient.getAccountId();
+        if (!accountId) {
+            return res.status(400).json({ error: 'Account ID required for Workers API' });
         }
 
-        // In a real implementation, we would fetch Workers analytics
-        // Currently using a mock response similar to what might come from Workers analytics
-        const now = new Date();
-        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        const startTime = req.query.startTime || yesterday.toISOString();
-        const endTime = req.query.endTime || now.toISOString();
+        const params = {
+            since: req.query.startTime,
+            until: req.query.endTime
+        };
 
-        res.json({
-            success: true,
-            errors: [],
-            messages: [],
-            result: {
-                Status: "success",
-                Granularity: "hour",
-                Timestamps: [
-                    startTime,
-                    endTime
-                ],
-                Values: [100, 150], // Example values
-                TotalValue: 250
+        // Remove undefined/null values
+        Object.keys(params).forEach(key => {
+            if (params[key] === undefined || params[key] === null) {
+                delete params[key];
             }
         });
+
+        try {
+            const data = await cfClient.getWorkersStats(accountId, params);
+            res.json(data);
+        } catch (e) {
+            // If workers API fails, return mock response structure
+            console.warn('Workers API failed, returning mock response:', e.message);
+            
+            const now = new Date();
+            const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+            const startTime = req.query.startTime || yesterday.toISOString();
+            const endTime = req.query.endTime || now.toISOString();
+
+            res.json({
+                success: true,
+                errors: [],
+                messages: [],
+                result: {
+                    Status: "success",
+                    Granularity: "hour",
+                    Timestamps: [
+                        startTime,
+                        endTime
+                    ],
+                    Values: [100, 150], // Example values
+                    TotalValue: 250
+                }
+            });
+        }
     } catch (err) {
         console.error('Error fetching Cloud Functions requests', err);
         res.status(500).json({ error: err.message });
@@ -208,8 +235,7 @@ app.get('/pages/cloud-function-requests', async (req, res) => {
 // Cloud Functions Monthly Stats endpoint
 app.get('/pages/cloud-function-monthly-stats', async (req, res) => {
     try {
-        const token = getToken();
-        const useLocalMock = process.env.USE_LOCAL_MOCK === '1' || !token;
+        const useLocalMock = process.env.USE_LOCAL_MOCK === '1' || !cfClient.token;
         
         if (useLocalMock) {
             // Return mock data
@@ -223,19 +249,206 @@ app.get('/pages/cloud-function-monthly-stats', async (req, res) => {
             }
         }
 
-        // For monthly Cloud Functions/Workers stats, we'd need to use Workers API
-        // This is a simplified implementation
-        res.json({
-            success: true,
-            errors: [],
-            messages: [],
-            result: {
-                TotalMemDuration: 10240, // Example: 10240 ms*GB of compute
-                TotalInvocation: 5000    // Example: 5000 invocations
-            }
-        });
+        const accountId = process.env.CF_ACCOUNT_ID || await cfClient.getAccountId();
+        if (!accountId) {
+            return res.status(400).json({ error: 'Account ID required for Workers API' });
+        }
+
+        try {
+            const params = {
+                since: req.query.since,
+                until: req.query.until
+            };
+
+            // Remove undefined/null values
+            Object.keys(params).forEach(key => {
+                if (params[key] === undefined || params[key] === null) {
+                    delete params[key];
+                }
+            });
+
+            const data = await cfClient.getWorkersStats(accountId, params);
+            res.json(data);
+        } catch (e) {
+            // If workers API fails, return mock response structure
+            console.warn('Workers API failed, returning mock response:', e.message);
+
+            res.json({
+                success: true,
+                errors: [],
+                messages: [],
+                result: {
+                    TotalMemDuration: 10240, // Example: 10240 ms*GB of compute
+                    TotalInvocation: 5000    // Example: 5000 invocations
+                }
+            });
+        }
     } catch (err) {
         console.error('Error fetching Cloud Functions monthly stats', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Detailed zone analytics endpoint
+app.get('/zone-analytics/:zoneId', async (req, res) => {
+    try {
+        const useLocalMock = process.env.USE_LOCAL_MOCK === '1' || !cfClient.token;
+        if (!cfClient.token && !useLocalMock) return res.status(500).json({ error: 'Missing Cloudflare API token. Set CF_API_TOKEN or cf_token.txt' });
+
+        const zoneId = req.params.zoneId;
+        if (!zoneId) return res.status(400).json({ error: 'Missing zoneId parameter' });
+
+        if (useLocalMock) {
+            // Return mock data
+            const mockFile = path.join(process.cwd(), '辅助文件', '站点总带宽回参.json');
+            if (fs.existsSync(mockFile)) {
+                const raw = fs.readFileSync(mockFile, 'utf-8');
+                const json = JSON.parse(raw);
+                return res.json(json);
+            } else {
+                return res.status(500).json({ error: `Local mock not found: ${mockFile}` });
+            }
+        }
+
+        const params = {
+            since: req.query.since,
+            until: req.query.until
+        };
+
+        // Remove undefined/null values
+        Object.keys(params).forEach(key => {
+            if (params[key] === undefined || params[key] === null) {
+                delete params[key];
+            }
+        });
+
+        const data = await cfClient.getZoneAnalytics(zoneId, params);
+        res.json(data);
+    } catch (err) {
+        console.error('Error fetching Cloudflare zone analytics', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Zone dashboard analytics endpoint (top countries, URLs, etc.)
+app.get('/zone-dashboard/:zoneId', async (req, res) => {
+    try {
+        const useLocalMock = process.env.USE_LOCAL_MOCK === '1' || !cfClient.token;
+        if (!cfClient.token && !useLocalMock) return res.status(500).json({ error: 'Missing Cloudflare API token. Set CF_API_TOKEN or cf_token.txt' });
+
+        const zoneId = req.params.zoneId;
+        if (!zoneId) return res.status(400).json({ error: 'Missing zoneId parameter' });
+
+        if (useLocalMock) {
+            // Return mock data
+            const mockFile = path.join(process.cwd(), '辅助文件', 'TOP状态码示例回参.json');
+            if (fs.existsSync(mockFile)) {
+                const raw = fs.readFileSync(mockFile, 'utf-8');
+                const json = JSON.parse(raw);
+                return res.json(json);
+            } else {
+                return res.status(500).json({ error: `Local mock not found: ${mockFile}` });
+            }
+        }
+
+        const params = {
+            since: req.query.since,
+            until: req.query.until
+        };
+
+        // Remove undefined/null values
+        Object.keys(params).forEach(key => {
+            if (params[key] === undefined || params[key] === null) {
+                delete params[key];
+            }
+        });
+
+        const data = await cfClient.getZoneAnalyticsDashboard(zoneId, params);
+        res.json(data);
+    } catch (err) {
+        console.error('Error fetching Cloudflare zone dashboard analytics', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Firewall events endpoint
+app.get('/firewall-events/:zoneId', async (req, res) => {
+    try {
+        const useLocalMock = process.env.USE_LOCAL_MOCK === '1' || !cfClient.token;
+        if (!cfClient.token && !useLocalMock) return res.status(500).json({ error: 'Missing Cloudflare API token. Set CF_API_TOKEN or cf_token.txt' });
+
+        const zoneId = req.params.zoneId;
+        if (!zoneId) return res.status(400).json({ error: 'Missing zoneId parameter' });
+
+        if (useLocalMock) {
+            // Return mock data
+            const mockFile = path.join(process.cwd(), '辅助文件', 'EdgeFunction请求数示例回参.json');
+            if (fs.existsSync(mockFile)) {
+                const raw = fs.readFileSync(mockFile, 'utf-8');
+                const json = JSON.parse(raw);
+                return res.json(json);
+            } else {
+                return res.status(500).json({ error: `Local mock not found: ${mockFile}` });
+            }
+        }
+
+        const params = {
+            since: req.query.since,
+            until: req.query.until
+        };
+
+        // Remove undefined/null values
+        Object.keys(params).forEach(key => {
+            if (params[key] === undefined || params[key] === null) {
+                delete params[key];
+            }
+        });
+
+        const data = await cfClient.getFirewallEvents(zoneId, params);
+        res.json(data);
+    } catch (err) {
+        console.error('Error fetching firewall events', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DDoS events endpoint
+app.get('/ddos-events/:zoneId', async (req, res) => {
+    try {
+        const useLocalMock = process.env.USE_LOCAL_MOCK === '1' || !cfClient.token;
+        if (!cfClient.token && !useLocalMock) return res.status(500).json({ error: 'Missing Cloudflare API token. Set CF_API_TOKEN or cf_token.txt' });
+
+        const zoneId = req.params.zoneId;
+        if (!zoneId) return res.status(400).json({ error: 'Missing zoneId parameter' });
+
+        if (useLocalMock) {
+            // Return mock data
+            const mockFile = path.join(process.cwd(), '辅助文件', 'EdgeFunctionsCPU时间回参.json');
+            if (fs.existsSync(mockFile)) {
+                const raw = fs.readFileSync(mockFile, 'utf-8');
+                const json = JSON.parse(raw);
+                return res.json(json);
+            } else {
+                return res.status(500).json({ error: `Local mock not found: ${mockFile}` });
+            }
+        }
+
+        const params = {
+            since: req.query.since,
+            until: req.query.until
+        };
+
+        // Remove undefined/null values
+        Object.keys(params).forEach(key => {
+            if (params[key] === undefined || params[key] === null) {
+                delete params[key];
+            }
+        });
+
+        const data = await cfClient.getDdosEvents(zoneId, params);
+        res.json(data);
+    } catch (err) {
+        console.error('Error fetching DDoS events', err);
         res.status(500).json({ error: err.message });
     }
 });
