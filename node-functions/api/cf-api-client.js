@@ -49,8 +49,26 @@ class CloudflareAPIClient {
       }
     };
 
-    const response = await fetch(url, config);
-    return await response.json();
+    try {
+      const response = await fetch(url, config);
+      
+      // 检查HTTP状态码
+      if (!response.ok) {
+        throw new Error(`HTTP Error: ${response.status} - ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      // 检查Cloudflare API的success字段
+      if (data && typeof data === 'object' && 'success' in data && data.success === false) {
+        throw new Error(`Cloudflare API Error: ${data.errors ? data.errors.map(e => e.message).join(', ') : 'Unknown error'}`);
+      }
+      
+      return data;
+    } catch (error) {
+      console.error(`Error making request to ${url}:`, error.message);
+      throw error;
+    }
   }
 
   /**
@@ -66,7 +84,7 @@ class CloudflareAPIClient {
     // 如果没有环境变量，则尝试从用户信息中获取
     try {
       const userInfo = await this.getUserInfo();
-      if (userInfo.success && userInfo.result && userInfo.result.id) {
+      if (userInfo && userInfo.success && userInfo.result && userInfo.result.id) {
         return userInfo.result.id;
       }
     } catch (error) {
