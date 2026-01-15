@@ -27,16 +27,19 @@ app.get('/zones', async (req, res) => {
                 const json = JSON.parse(raw);
                 return res.json(json);
             } else {
+                console.error(`Mock file not found: ${mockFile}`);
                 return res.status(500).json({ error: `Local mock not found: ${mockFile}` });
             }
         }
 
         // Get zones with optional name filter
+        console.log('Fetching zones with params:', req.query);
         const zonesResponse = await cfClient.getZones(req.query);
+        console.log('Zones response received:', zonesResponse && zonesResponse.success !== undefined ? `Success: ${zonesResponse.success}` : 'Non-CF response');
         res.json(zonesResponse);
     } catch (err) {
         console.error('Error fetching Cloudflare zones', err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: err.message, details: err.toString() });
     }
 });
 
@@ -58,7 +61,16 @@ app.get('/traffic', async (req, res) => {
                     const json = JSON.parse(raw);
                     return res.json(json);
                 } else {
-                    return res.status(500).json({ error: `Local mock not found: ${mockFile}` });
+                    // If specific mock file doesn't exist, try generic l7Flow_flux mock
+                    const genericMockFile = path.join(process.cwd(), '辅助文件', 'mock_l7Flow_flux.json');
+                    if (fs.existsSync(genericMockFile)) {
+                        const raw = fs.readFileSync(genericMockFile, 'utf-8');
+                        const json = JSON.parse(raw);
+                        return res.json(json);
+                    } else {
+                        console.error(`Mock file not found: ${mockFile} or fallback mock`);
+                        return res.status(500).json({ error: `Local mock not found: ${mockFile} or fallback mock` });
+                    }
                 }
             } catch (e) {
                 console.error('Error returning local mock:', e);
@@ -66,12 +78,13 @@ app.get('/traffic', async (req, res) => {
             }
         }
 
+        // Map frontend metric names to Cloudflare API metrics
+        const metric = req.query.metric || 'l7Flow_flux';
+        
         // Prepare parameters for API call
         const params = {
-            startTime: req.query.startTime,
-            endTime: req.query.endTime,
-            metrics: req.query.metrics || 'bandwidth,requests',
-            continuous: 'true'
+            since: req.query.startTime,
+            until: req.query.endTime
         };
 
         // Remove undefined/null values
@@ -81,13 +94,96 @@ app.get('/traffic', async (req, res) => {
             }
         });
 
+        console.log('Fetching zone analytics series with params:', { zoneId, params });
         const data = await cfClient.getZoneAnalyticsSeries(zoneId, params);
-        res.json(data);
+        console.log('Traffic data response received:', data && data.success !== undefined ? `Success: ${data.success}` : 'Non-CF response');
+        
+        // Transform the response to match frontend expectations
+        const transformedData = transformCloudflareData(data, metric);
+        res.json(transformedData);
     } catch (err) {
         console.error('Error fetching Cloudflare traffic', err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: err.message, details: err.toString() });
     }
 });
+
+// Helper function to transform Cloudflare API response to match frontend expectations
+function transformCloudflareData(data, metric) {
+    // If the original data has an error, return it as-is
+    if (!data.success && data.errors) {
+        return data;
+    }
+    
+    // Create a transformed response that matches frontend expectations
+    const transformed = {
+        success: true,
+        errors: [],
+        messages: [],
+        result: {
+            data: []
+        }
+    };
+    
+    // If data has Cloudflare-specific format, convert it to the expected format
+    if (data.result && data.result.timeseries) {
+        // Convert Cloudflare timeseries data to frontend format
+        transformed.result.data = data.result.timeseries.map(item => {
+            return {
+                time: item.t,
+                // Map various Cloudflare metrics to frontend expectations
+                ...mapCloudflareMetrics(item)
+            };
+        });
+    } else if (data.result && Array.isArray(data.result)) {
+        // Handle array format
+        transformed.result.data = data.result.map(item => {
+            return {
+                time: item.time || new Date().toISOString(),
+                ...mapCloudflareMetrics(item)
+            };
+        });
+    } else {
+        // If no timeseries data, return the original result but ensure proper format
+        transformed.result = data.result || {};
+    }
+    
+    return transformed;
+}
+
+// Helper function to map Cloudflare metrics to frontend metric names
+function mapCloudflareMetrics(cfItem) {
+    // Map Cloudflare metrics to frontend metrics
+    const mapped = {};
+    
+    // Map common Cloudflare metrics to frontend expected names
+    if (cfItem.edgeResponseBytes !== undefined) {
+        mapped.l7Flow_flux = cfItem.edgeResponseBytes;
+        mapped.l7Flow_outFlux = cfItem.edgeResponseBytes;
+    }
+    
+    if (cfItem.requests !== undefined) {
+        mapped.l7Flow_request = cfItem.requests;
+    }
+    
+    if (cfItem.threats !== undefined) {
+        mapped.security_threats = cfItem.threats;
+    }
+    
+    if (cfItem.cachedBytes !== undefined) {
+        mapped.l7Flow_inFlux = cfItem.cachedBytes; // From cache
+    }
+    
+    if (cfItem.edgeResponseTime !== undefined) {
+        mapped.l7Flow_avgResponseTime = cfItem.edgeResponseTime;
+    }
+    
+    // Add some calculated metrics
+    if (cfItem.requests && cfItem.edgeResponseBytes) {
+        mapped.l7Flow_avgBandwidth = cfItem.edgeResponseBytes / Math.max(cfItem.requests, 1);
+    }
+    
+    return mapped;
+}
 
 // Pages Build Count endpoint
 app.get('/pages/build-count', async (req, res) => {
@@ -323,7 +419,10 @@ app.get('/zone-analytics/:zoneId', async (req, res) => {
         });
 
         const data = await cfClient.getZoneAnalytics(zoneId, params);
-        res.json(data);
+        
+        // Transform the response to match frontend expectations
+        const transformedData = transformCloudflareData(data, 'zone-analytics');
+        res.json(transformedData);
     } catch (err) {
         console.error('Error fetching Cloudflare zone analytics', err);
         res.status(500).json({ error: err.message });

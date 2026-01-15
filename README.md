@@ -2,6 +2,31 @@
 
 本项目使用 Cloudflare API 作为数据源，提供站点流量与请求的可视化监控面板。
 
+## 配置说明
+
+### 获取Cloudflare API令牌
+
+1. 登录到 [Cloudflare Dashboard](https://dash.cloudflare.com)
+2. 前往 "My Profile" → "API Tokens"
+3. 点击 "Create Token"
+4. 使用 "Edit zone DNS" 模板（或根据需要自定义权限）
+5. 记下生成的API令牌
+
+### 环境变量配置
+
+复制 `.env.example` 为 `.env` 并填入相应值：
+
+```bash
+cp .env.example .env
+# 编辑 .env 文件并填入你的API令牌
+```
+
+- `CF_API_TOKEN`: Cloudflare API 令牌（必需）
+- `CF_ACCOUNT_ID`: Cloudflare 账户 ID（可选，用于Workers/Pages API）
+- `SITE_NAME`: 站点名称
+- `SITE_ICON`: 站点图标URL
+- `USE_LOCAL_MOCK`: 是否使用本地模拟数据（1为是，0为否）
+
 ## 效果
 
 前端使用 ECharts 等可视化组件，后端通过 Cloudflare REST API 获取流量与分析数据。
@@ -20,6 +45,7 @@
 - `SITE_NAME`：可选，大屏标题（默认 `Cloudflare 流量监控`）。
 - `SITE_ICON`：可选，网站图标 URL。
 - `USE_LOCAL_MOCK`：可选，设置为 `1` 时使用本地模拟数据而不是真实API。
+- `CF_ACCOUNT_ID`：可选，Cloudflare 账户 ID（用于Workers/Pages API）
 
 也可将 API token 放在项目根目录的 `cf_token.txt` 文件中（仅在本地测试时使用）。
 
@@ -33,6 +59,7 @@
 4. 在 **环境变量 (Environment Variables)** 中添加以下配置：
    - `CF_API_TOKEN`：您的 Cloudflare API Token
    - `SITE_NAME`：可选的站点名称
+   - `CF_ACCOUNT_ID`：可选的账户ID（如需使用Workers/Pages API）
 
 ### 方式二：本地运行（Node.js）
 
@@ -61,14 +88,26 @@ SITE_NAME=我的 Cloudflare 站点监控
 SITE_ICON=https://example.com/favicon.png
 ```
 
+### 测试API连接
+
+你可以运行以下命令来测试API连接：
+
+```bash
+node test-api.js
+```
+
 ## API 端点
 
 - `GET /config`：返回 `siteName` 与 `siteIcon`。
 - `GET /zones`：列出 Cloudflare Zone 列表，支持 `?name=` 过滤。
 - `GET /traffic?zoneId=...&startTime=...&endTime=...&metrics=bandwidth,requests`：查询指定 Zone 的时间序列指标。
+- `GET /zone-analytics/:zoneId`：获取特定zone的分析数据
+- `GET /zone-dashboard/:zoneId`：获取特定zone的仪表板数据
 - `GET /pages/build-count`：获取 Pages 构建计数信息。
 - `GET /pages/cloud-function-requests`：获取 Cloud Functions 请求数统计。
 - `GET /pages/cloud-function-monthly-stats`：获取 Cloud Functions 月度统计。
+- `GET /firewall-events/:zoneId`：获取防火墙事件
+- `GET /ddos-events/:zoneId`：获取DDoS事件
 
 ## Cloudflare API 集成说明
 
@@ -81,7 +120,6 @@ SITE_ICON=https://example.com/favicon.png
 - **Zone 列表**: `GET https://api.cloudflare.com/client/v4/zones`
 - **流量分析**: `GET https://api.cloudflare.com/client/v4/zones/{zone_id}/analytics/series`
 - **请求参数**:
-  - `metrics`: 指标名称，如 `requests`, `bandwidth`, `uniques`
   - `since`: 开始时间 (ISO 8601 格式)
   - `until`: 结束时间 (ISO 8601 格式)
   - `continuous`: 是否连续数据

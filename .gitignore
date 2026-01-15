@@ -2,15 +2,14 @@
 # Dependencies
 node_modules/
 
-# Logs and temp files
-*.log
-*.tmp
-*.swp
-
 # Environment
 .env
 .env.local
-*.env.*
+.env.*
+
+# Logs and temp files
+*.log
+*.tmp
 
 # Editors
 .vscode/
@@ -45,7 +44,20 @@ target/
 *.dylib
 *.exe
 
-# Compression
+# Go
+*.o
+
+# Ruby
+*.gem
+*.rbc
+coverage/
+.ruby-version
+
+# Gradle
+.gradle/
+build/
+
+# Compressed files
 *.zip
 *.gz
 *.tar
@@ -64,19 +76,8 @@ target/
 *.Z
 *.lz
 *.lzo
-
-# OS generated files
-.DS_Store
-Thumbs.db
-
-# Coverage
-coverage/
-htmlcov/
-.coverage
-
-# Testing
-.mypy_cache/
-.pytest_cache/
-.nyc_output/
-istanbul/
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
 ```
